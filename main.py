@@ -96,123 +96,123 @@ class EbSynthProject:
 	magic_number: int = MAGIC_FINAL_INTEGER
 
 
-def bytes_to_bool(buffer: BinaryIO) -> bool:
+def read_bool(buffer: BinaryIO) -> bool:
 	return struct.unpack('<?', buffer.read(1))[0]
 
 
-def bool_to_bytes(value: bool) -> bytes:
-	return struct.pack('<?', value)
+def write_bool(buffer: BinaryIO, value: bool):
+	return buffer.write(struct.pack('<?', value))
 
 
-def bytes_to_int(buffer: BinaryIO) -> int:
+def read_int(buffer: BinaryIO) -> int:
 	return struct.unpack('<i', buffer.read(4))[0]
 
 
-def int_to_bytes(value: int) -> bytes:
-	return struct.pack('<i', value)
+def write_int(buffer: BinaryIO, value: int):
+	return buffer.write(struct.pack('<i', value))
 
 
-def bytes_to_float(buffer: BinaryIO) -> float:
+def read_float(buffer: BinaryIO) -> float:
 	return struct.unpack('<f', buffer.read(4))[0]
 
 
-def float_to_bytes(value: float) -> bytes:
-	return struct.pack('<f', value)
+def write_float(buffer: BinaryIO, value: float):
+	return buffer.write(struct.pack('<f', value))
 
 
-def bytes_to_constant_string(buffer: BinaryIO, reference: str) -> str:
+def read_constant_string(buffer: BinaryIO, reference: str) -> str:
 	return buffer.read(len(reference) + 1)[:-1]
 
 
-def constant_string_to_bytes(string: str) -> bytes:
-	return string.encode(encoding='ascii') + b'\0'
+def write_constant_string(buffer: BinaryIO, string: str):
+	return buffer.write(string.encode(encoding='ascii') + b'\0')
 
 
-def bytes_to_variable_string(buffer: BinaryIO) -> str:
-	length = bytes_to_int(buffer)
+def read_variable_string(buffer: BinaryIO) -> str:
+	length = read_int(buffer)
 	return buffer.read(length).decode('ascii')
 
 
-def variable_string_to_bytes(string: str) -> bytes:
-	return int_to_bytes(len(string)) + string.encode(encoding='ascii')
+def write_variable_string(buffer: BinaryIO, string: str):
+	write_int(buffer, len(string))
+	buffer.write(string.encode(encoding='ascii'))
 
 
-def bytes_to_interval(buffer: BinaryIO) -> EbSynthInterval:
+def read_interval(buffer: BinaryIO) -> EbSynthInterval:
 	return EbSynthInterval(
-		key_frame=bytes_to_int(buffer),
-		first_frame_is_used=bytes_to_bool(buffer),
-		final_frame_is_used=bytes_to_bool(buffer),
-		first_frame=bytes_to_int(buffer),
-		final_frame=bytes_to_int(buffer),
-		output_path=bytes_to_variable_string(buffer),
+		key_frame=read_int(buffer),
+		first_frame_is_used=read_bool(buffer),
+		final_frame_is_used=read_bool(buffer),
+		first_frame=read_int(buffer),
+		final_frame=read_int(buffer),
+		output_path=read_variable_string(buffer),
 	)
 
 
-def interval_to_bytes(interval: EbSynthInterval) -> bytes:
-	return bytes().join((
-		int_to_bytes(interval.key_frame),
-		bool_to_bytes(interval.first_frame_is_used),
-		bool_to_bytes(interval.final_frame_is_used),
-		int_to_bytes(interval.first_frame),
-		int_to_bytes(interval.final_frame),
-		variable_string_to_bytes(interval.output_path),
-	))
+def write_interval(buffer: BinaryIO, interval: EbSynthInterval):
+	write_int(buffer, interval.key_frame)
+	write_bool(buffer, interval.first_frame_is_used)
+	write_bool(buffer, interval.final_frame_is_used)
+	write_int(buffer, interval.first_frame)
+	write_int(buffer, interval.final_frame)
+	write_variable_string(buffer, interval.output_path)
 
 
-def bytes_to_project(buffer: BinaryIO) -> EbSynthProject:
+def read_project(buffer: BinaryIO) -> EbSynthProject:
 	return EbSynthProject(
-		program_version=bytes_to_constant_string(buffer, MAGIC_PROGRAM_VERSION),
-		video_path=bytes_to_variable_string(buffer),
-		mask_path=bytes_to_variable_string(buffer),
-		keys_path=bytes_to_variable_string(buffer),
-		use_mask=bytes_to_bool(buffer),
-		keys_weight=bytes_to_float(buffer),
-		video_weight=bytes_to_float(buffer),
-		mask_weight=bytes_to_float(buffer),
-		mapping=bytes_to_float(buffer),
-		de_flicker=bytes_to_float(buffer),
-		diversity=bytes_to_float(buffer),
+		program_version=read_constant_string(buffer, MAGIC_PROGRAM_VERSION),
+		video_path=read_variable_string(buffer),
+		mask_path=read_variable_string(buffer),
+		keys_path=read_variable_string(buffer),
+		use_mask=read_bool(buffer),
+		keys_weight=read_float(buffer),
+		video_weight=read_float(buffer),
+		mask_weight=read_float(buffer),
+		mapping=read_float(buffer),
+		de_flicker=read_float(buffer),
+		diversity=read_float(buffer),
 		intervals=[
-			bytes_to_interval(buffer)
-			for _ in range(bytes_to_int(buffer))
+			read_interval(buffer)
+			for _ in range(read_int(buffer))
 		],
-		project_version=bytes_to_constant_string(buffer, MAGIC_PROJECT_VERSION),
-		synthesis_detail=bytes_to_int(buffer),
-		use_gpu=bytes_to_bool(buffer),
-		frames_per_second=bytes_to_float(buffer),
-		magic_number=bytes_to_int(buffer),
+		project_version=read_constant_string(buffer, MAGIC_PROJECT_VERSION),
+		synthesis_detail=read_int(buffer),
+		use_gpu=read_bool(buffer),
+		frames_per_second=read_float(buffer),
+		magic_number=read_int(buffer),
 	)
 
 
-def project_to_bytes(project: EbSynthProject) -> bytes:
-	return bytes().join((
-		constant_string_to_bytes(project.program_version),
-		variable_string_to_bytes(project.video_path),
-		variable_string_to_bytes(project.mask_path),
-		variable_string_to_bytes(project.keys_path),
-		bool_to_bytes(project.use_mask),
-		float_to_bytes(project.keys_weight),
-		float_to_bytes(project.video_weight),
-		float_to_bytes(project.mask_weight),
-		float_to_bytes(project.mapping),
-		float_to_bytes(project.de_flicker),
-		float_to_bytes(project.diversity),
-		int_to_bytes(len(project.intervals)),
-		*map(interval_to_bytes, project.intervals),
-		constant_string_to_bytes(project.project_version),
-		int_to_bytes(project.synthesis_detail),
-		bool_to_bytes(project.use_gpu),
-		float_to_bytes(project.frames_per_second),
-		int_to_bytes(project.magic_number),
-	))
+def write_project(buffer: BinaryIO, project: EbSynthProject):
+	write_constant_string(buffer, project.program_version)
+	write_variable_string(buffer, project.video_path)
+	write_variable_string(buffer, project.mask_path)
+	write_variable_string(buffer, project.keys_path)
+	write_bool(buffer, project.use_mask)
+	write_float(buffer, project.keys_weight)
+	write_float(buffer, project.video_weight)
+	write_float(buffer, project.mask_weight)
+	write_float(buffer, project.mapping)
+	write_float(buffer, project.de_flicker)
+	write_float(buffer, project.diversity)
+
+	write_int(buffer, len(project.intervals))
+	for interval in project.intervals:
+		write_interval(buffer, interval)
+
+	write_constant_string(buffer, project.project_version)
+	write_int(buffer, project.synthesis_detail)
+	write_bool(buffer, project.use_gpu)
+	write_float(buffer, project.frames_per_second)
+	write_int(buffer, project.magic_number)
 
 
 def main():
 	with open('test.ebs', 'wb') as file:
-		file.write(project_to_bytes(EbSynthProject()))
+		write_project(file, EbSynthProject())
 
 	with open('test.ebs', 'rb') as file:
-		print(bytes_to_project(file))
+		print(read_project(file))
 
 
 if __name__ == '__main__':
