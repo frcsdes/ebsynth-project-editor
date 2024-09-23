@@ -1,3 +1,4 @@
+import argparse
 import struct
 
 from dataclasses import dataclass, field
@@ -96,6 +97,94 @@ class EbSynthProject:
 	magic_number: int = MAGIC_FINAL_INTEGER
 
 
+def get_synthesis_detail_name(level: int) -> str:
+	""" Return the name of the given synthesis detail `level`. """
+
+	match level:
+		case 1:
+			return 'High'
+		case 2:
+			return 'Medium'
+		case 3:
+			return 'Low'
+		case 4:
+			return 'Garbage'
+		case _:
+			return 'Unknown'
+
+
+def print_interval(interval: EbSynthInterval, padding: int):
+	""" Print formatted information about the given frames `interval`. """
+
+	def is_used_symbol(value: bool) -> str:
+		return 'Y' if value else 'N'
+
+	print(
+		f'{interval.first_frame:>{padding}}',
+		is_used_symbol(interval.first_frame_is_used),
+		f'{interval.key_frame:>{padding}}',
+		f'{interval.final_frame:>{padding}}',
+		is_used_symbol(interval.final_frame_is_used),
+		interval.output_path,
+	)
+
+
+def print_project(project: EbSynthProject):
+	""" Print formatted information about the given `project`. """
+
+	# Format the synthesis detail
+	synthesis_detail_name = get_synthesis_detail_name(project.synthesis_detail)
+	synthesis_detail = f'{project.synthesis_detail} ({synthesis_detail_name})'
+
+	# All printed categories that contain field names and their value
+	categories = {
+		'Project': {
+			'EbSynth version': project.program_version,
+			'Frames per second': project.frames_per_second,
+		},
+		'Images': {
+			'Key images': project.keys_path,
+			'Video images': project.video_path,
+			'Mask images': project.mask_path,
+		},
+		'Weights': {
+			'Key images weight': project.keys_weight,
+			'Video images weight': project.video_weight,
+			'Mask images weight': project.mask_weight,
+			'Mask images enabled': project.use_mask,
+		},
+		'Advanced': {
+			'Mapping': project.mapping,
+			'De-flicker': project.de_flicker,
+			'Diversity': project.diversity,
+		},
+		'Performance': {
+			'Synthesis detail': synthesis_detail,
+			'Use GPU': project.use_gpu,
+		}
+	}
+
+	# Print all information about the project
+	for category_name, field_name_and_value in categories.items():
+		print(category_name)
+		print('-' * len(category_name))
+
+		padding = max(map(lambda x: len(x[0]), field_name_and_value.items()))
+		for name, value in field_name_and_value.items():
+			print(f'{name}:'.ljust(padding + 1), value)
+
+		print()
+
+	# Print all intervals in the project
+	intervals_label = 'Intervals'
+	print('Intervals')
+	print('-' * len(intervals_label))
+	print('Start ?', 'Keyfm', 'Final ?', 'Output')
+
+	for interval in project.intervals:
+		print_interval(interval, 5)
+
+
 def read_bool(buffer: BinaryIO) -> bool:
 	return struct.unpack('<?', buffer.read(1))[0]
 
@@ -121,7 +210,7 @@ def write_float(buffer: BinaryIO, value: float):
 
 
 def read_constant_string(buffer: BinaryIO, reference: str) -> str:
-	return buffer.read(len(reference) + 1)[:-1]
+	return buffer.read(len(reference) + 1)[:-1].decode('ascii')
 
 
 def write_constant_string(buffer: BinaryIO, string: str):
@@ -139,6 +228,8 @@ def write_variable_string(buffer: BinaryIO, string: str):
 
 
 def read_interval(buffer: BinaryIO) -> EbSynthInterval:
+	""" Return a frames interval read from the given `binary buffer`. """
+
 	return EbSynthInterval(
 		key_frame=read_int(buffer),
 		first_frame_is_used=read_bool(buffer),
@@ -150,6 +241,8 @@ def read_interval(buffer: BinaryIO) -> EbSynthInterval:
 
 
 def write_interval(buffer: BinaryIO, interval: EbSynthInterval):
+	""" Write the given frames `interval` to the binary `buffer`. """
+
 	write_int(buffer, interval.key_frame)
 	write_bool(buffer, interval.first_frame_is_used)
 	write_bool(buffer, interval.final_frame_is_used)
@@ -159,6 +252,8 @@ def write_interval(buffer: BinaryIO, interval: EbSynthInterval):
 
 
 def read_project(buffer: BinaryIO) -> EbSynthProject:
+	""" Return a project read from the given binary `buffer`. """
+
 	return EbSynthProject(
 		program_version=read_constant_string(buffer, MAGIC_PROGRAM_VERSION),
 		video_path=read_variable_string(buffer),
@@ -184,6 +279,8 @@ def read_project(buffer: BinaryIO) -> EbSynthProject:
 
 
 def write_project(buffer: BinaryIO, project: EbSynthProject):
+	""" Write the given `project` to the binary `buffer`. """
+
 	write_constant_string(buffer, project.program_version)
 	write_variable_string(buffer, project.video_path)
 	write_variable_string(buffer, project.mask_path)
@@ -207,12 +304,52 @@ def write_project(buffer: BinaryIO, project: EbSynthProject):
 	write_int(buffer, project.magic_number)
 
 
-def main():
-	with open('test.ebs', 'wb') as file:
-		write_project(file, EbSynthProject())
+def read_project_or_return_default(path: Path | None) -> EbSynthProject:
+	""" Return the project read from `path`, or a default if path is `None`. """
 
-	with open('test.ebs', 'rb') as file:
-		print(read_project(file))
+	if path is None:
+		return EbSynthProject()
+	else:
+		with open(path, 'rb') as file:
+			return read_project(file)
+
+
+def write_project_or_print_it(path: Path | None, project: EbSynthProject):
+	""" Write the `project` to `path`, or print it if path is `None`. """
+
+	if path is None:
+		print_project(project)
+	else:
+		with open(path, 'wb') as file:
+			write_project(file, project)
+
+
+def main():
+	""" Command-line editor for EbSynth (EBS) project files. """
+
+	parser = argparse.ArgumentParser(description=main.__doc__)
+	parser.add_argument(
+		'-i', '--input',
+		help=(
+			'Path to the input EBS file; '
+			'if there is none, the default EbSynth project is used'
+		),
+		type=Path,
+		required=False,
+	)
+	parser.add_argument(
+		'-o', '--output',
+		help=(
+			'Path to the output EBS file; '
+			'if there is none, the resulting project is just printed'
+		),
+		type=Path,
+		required=False,
+	)
+
+	arguments = parser.parse_args()
+	project = read_project_or_return_default(arguments.input)
+	write_project_or_print_it(arguments.output, project)
 
 
 if __name__ == '__main__':
