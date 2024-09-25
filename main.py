@@ -9,10 +9,10 @@ from typing import BinaryIO, Iterable, Sequence
 # Supposedly, the current version of the program
 MAGIC_PROGRAM_VERSION = 'EBS05'
 
-# Supposedly, the current version of the project file structure
-MAGIC_PROJECT_VERSION = 'V02'
+# Supposedly, a string that indicates that the project has extra metadata
+MAGIC_EXTRA_METADATA = 'V02'
 
-# Uninterpreted integer value that appears at the end of project files
+# Uninterpreted value that appears at the end of projects with extra metadata
 MAGIC_FINAL_INTEGER = 704
 
 
@@ -46,10 +46,7 @@ class EbSynthProject:
 	# Supposedly, the current version of the program
 	program_version: str = MAGIC_PROGRAM_VERSION
 
-	# Supposedly, the current version of the project file structure
-	project_version: str = MAGIC_PROJECT_VERSION
-
-	# Number of frames per second used for the After Effects export
+	# Number of frames per second
 	frames_per_second: float = 30.0
 
 	# Relative path to the keyframe images
@@ -82,7 +79,7 @@ class EbSynthProject:
 	# Diversity parameters that controls the visual richness of the style
 	diversity: float = 3500.0
 
-	# All image intervals that are synthesized
+	# All frame intervals that are synthesized
 	intervals: list[EbSynthInterval] = field(default_factory=list)
 
 	# Quality of the synthesis detail
@@ -90,9 +87,6 @@ class EbSynthProject:
 
 	# `True` if GPU is used for the synthesis, `False` otherwise
 	use_gpu: bool = True
-
-	# Uninterpreted integer value that appears at the end of project files
-	magic_number: int = MAGIC_FINAL_INTEGER
 
 
 def get_synthesis_detail_name(level: int) -> str:
@@ -140,12 +134,12 @@ def print_project(project: EbSynthProject):
 			'EbSynth version': project.program_version,
 			'Frames per second': project.frames_per_second,
 		},
-		'Images': {
+		'Image paths': {
 			'Key images path': project.key_images_path,
 			'Video images path': project.video_images_path,
 			'Mask images path': project.mask_images_path,
 		},
-		'Weights': {
+		'Image weights': {
 			'Key images weight': project.key_images_weight,
 			'Video images weight': project.video_images_weight,
 			'Mask images weight': project.mask_images_weight,
@@ -257,7 +251,8 @@ def write_interval(buffer: BinaryIO, interval: EbSynthInterval):
 def read_project(buffer: BinaryIO) -> EbSynthProject:
 	""" Return a project read from the given binary `buffer`. """
 
-	return EbSynthProject(
+	# Construct the project from data that is always present
+	project = EbSynthProject(
 		program_version=read_constant_string(buffer, MAGIC_PROGRAM_VERSION),
 		video_images_path=read_variable_string(buffer),
 		mask_images_path=read_variable_string(buffer),
@@ -269,16 +264,16 @@ def read_project(buffer: BinaryIO) -> EbSynthProject:
 		mapping=read_float(buffer),
 		de_flicker=read_float(buffer),
 		diversity=read_float(buffer),
-		intervals=[
-			read_interval(buffer)
-			for _ in range(read_int(buffer))
-		],
-		project_version=read_constant_string(buffer, MAGIC_PROJECT_VERSION),
-		synthesis_detail=read_int(buffer),
-		use_gpu=read_bool(buffer),
-		frames_per_second=read_float(buffer),
-		magic_number=read_int(buffer),
+		intervals=[read_interval(buffer) for _ in range(read_int(buffer))],
 	)
+
+	# Continue reading from the buffer if it has extra metadata
+	if read_constant_string(buffer, MAGIC_EXTRA_METADATA):
+		project.synthesis_detail = read_int(buffer)
+		project.use_gpu = read_bool(buffer)
+		project.frames_per_second = read_float(buffer)
+
+	return project
 
 
 def write_project(buffer: BinaryIO, project: EbSynthProject):
@@ -300,11 +295,11 @@ def write_project(buffer: BinaryIO, project: EbSynthProject):
 	for interval in project.intervals:
 		write_interval(buffer, interval)
 
-	write_constant_string(buffer, project.project_version)
+	write_constant_string(buffer, MAGIC_EXTRA_METADATA)
 	write_int(buffer, project.synthesis_detail)
 	write_bool(buffer, project.use_gpu)
 	write_float(buffer, project.frames_per_second)
-	write_int(buffer, project.magic_number)
+	write_int(buffer, MAGIC_FINAL_INTEGER)
 
 
 def read_project_or_return_default(path: Path | None) -> EbSynthProject:
