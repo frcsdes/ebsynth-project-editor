@@ -39,7 +39,13 @@ options:
                         resulting project is just printed
   -ai [ADD_INTERVALS ...], --add-intervals [ADD_INTERVALS ...]
                         add overlapping frame intervals using the syntax
-                        "first:final:step:output\{i%02}\[####].png"
+                        "first:final:step:left:right\{i%0padding}\[####].png"
+                        where `first` is the index of the first frame, `final`
+                        is the index of the final frame, `step` is the number
+                        of frames that separate two keyframes, `left` is the
+                        left extent of each interval, `right` is the right
+                        extent of each interval, and `i` is a placeholder for
+                        the interval index with `padding` zeroes.
   -fps FRAMES_PER_SECOND, --frames-per-second FRAMES_PER_SECOND
                         set the number of frames per second
   -kp KEY_IMAGES_PATH, --key-images-path KEY_IMAGES_PATH
@@ -110,22 +116,22 @@ Start    ? | Key      | Final    ? | Output
 You can add intervals to synthesize a sequence from frame 0 to 100 with a step of 10.
 
 ```
-$ py -3 main.py --add-intervals "0:100:10:out\{i%02}\[####].png"
+$ py -3 main.py --add-intervals "0:100:10:15:5:out\{i%02}\[####].png"
 
 ...
 
 Intervals
 ---------
 Start    ? | Key      | Final    ? | Output
-       0 Y |       10 |       20 Y | out\01\[####].png
-      10 Y |       20 |       30 Y | out\02\[####].png
-      20 Y |       30 |       40 Y | out\03\[####].png
-      30 Y |       40 |       50 Y | out\04\[####].png
-      40 Y |       50 |       60 Y | out\05\[####].png
-      50 Y |       60 |       70 Y | out\06\[####].png
-      60 Y |       70 |       80 Y | out\07\[####].png
-      70 Y |       80 |       90 Y | out\08\[####].png
-      80 Y |       90 |      100 Y | out\09\[####].png
+       0 Y |       15 |       20 Y | out\00\[####].png
+      10 Y |       25 |       30 Y | out\01\[####].png
+      20 Y |       35 |       40 Y | out\02\[####].png
+      30 Y |       45 |       50 Y | out\03\[####].png
+      40 Y |       55 |       60 Y | out\04\[####].png
+      50 Y |       65 |       70 Y | out\05\[####].png
+      60 Y |       75 |       80 Y | out\06\[####].png
+      70 Y |       85 |       90 Y | out\07\[####].png
+      80 Y |       95 |      100 Y | out\08\[####].png
 ```
 
 ## License

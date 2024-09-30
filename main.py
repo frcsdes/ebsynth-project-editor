@@ -322,30 +322,39 @@ def write_project_or_print_it(path: Path | None, project: EbSynthProject):
 			write_project(file, project)
 
 
-def create_overlapping_intervals(
-	steps: Sequence[int],
+def create_intervals(
+	first: int,
+	final: int,
+	step: int,
+	left: int,
+	right: int,
 	output: str,
 ) -> Iterable[EbSynthInterval]:
-	output_format = output.replace('%', ':')
+	"""
+	Return frame intervals inside the `first` and `final` frame numbers,
+	inclusive. Their keyframes are separated by `step` frames, and each
+	interval contains `left + right + 1` frames. `output` is a format string
+	that can be interpolated with placeholder `i` as an integer.
+	"""
 
-	def create_interval(
-		index_and_frame_numbers: tuple[int, tuple[int, int, int]],
-	) -> EbSynthInterval:
-		index, frame_numbers = index_and_frame_numbers
-		first_frame, key_frame, final_frame = frame_numbers
-		output_path = output_format.format(i=index + 1)
+	def create_one_interval(index_and_key: tuple[int, int]) -> EbSynthInterval:
+		""" Return a new interval around the given key frame. """
+
+		index, interval_key_frame = index_and_key
+		interval_first_frame = interval_key_frame - left
+		interval_final_frame = min(interval_key_frame + right, final)
+		output_path = output.format(i=index)
 
 		return EbSynthInterval(
-			key_frame=key_frame,
+			key_frame=interval_key_frame,
 			first_frame_is_used=True,
 			final_frame_is_used=True,
-			first_frame=first_frame,
-			final_frame=final_frame,
+			first_frame=interval_first_frame,
+			final_frame=interval_final_frame,
 			output_path=output_path,
 		)
 
-	triplets = zip(steps[0:], steps[1:], steps[2:])
-	return map(create_interval, enumerate(triplets))
+	return map(create_one_interval, enumerate(range(first + left, final, step)))
 
 
 def main():
@@ -376,7 +385,13 @@ def main():
 		'-ai', '--add-intervals',
 		help=(
 			'add overlapping frame intervals using the syntax '
-			'\"first:final:step:output\\{i%%02}\\[####].png\"'
+			'\"first:final:step:left:right\\{i%%0padding}\\[####].png\" where '
+			'`first` is the index of the first frame, '
+			'`final` is the index of the final frame, '
+			'`step` is the number of frames that separate two keyframes, '
+			'`left` is the left extent of each interval, '
+			'`right`  is the right extent of each interval, and '
+			'`i` is a placeholder for the interval index with `padding` zeroes.'
 		),
 		type=str,
 		nargs='*',
@@ -465,10 +480,17 @@ def main():
 	project = read_project_or_return_default(arguments.input)
 
 	# Intervals creation
-	for interval_description in (arguments.add_intervals or ()):
-		first, final, step, output = interval_description.split(':')
-		steps = range(int(first), int(final) + 1, int(step))
-		project.intervals.extend(create_overlapping_intervals(steps, output))
+	for interval_format in (arguments.add_intervals or ()):
+		# Separate the arguments and cast them to their expected type
+		[first, final, step, left, right, output] = interval_format.split(':')
+		project.intervals.extend(create_intervals(
+			int(first),
+			int(final),
+			int(step),
+			int(left),
+			int(right),
+			output.replace('%', ':'),
+		))
 
 	def map_argument_to_project_setting(name: str):
 		if (value := arguments.__dict__[name]) is not None:
